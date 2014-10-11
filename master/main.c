@@ -147,7 +147,7 @@ int main() {
 // I2C_Detect
 while(1) {
     p("\r\nScaning....\r\n");
-    for(uint8_t i = 5; i < 255; i++) {
+    for(uint8_t i = 5; i < 127; i++) {
 			  if(I2C_Detect(i<<1)) {
 				TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//TWI STOP
 				while(TWCR & (1<<TWSTO));
