@@ -1,6 +1,6 @@
-MCU = atmega8
-PROGRAMMER = usbasp
-PROGRAMMER_PARAMS = -B 10
+MCU ?= atmega8
+PROGRAMMER ?= usbasp
+PROGRAMMER_PARAMS ?= -B 10
 BIN = ./bin
 
 .PHONY: clean prepare
