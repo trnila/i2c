@@ -1,4 +1,4 @@
-MCU = atmega8
+MCU = atmega328p
 PROGRAMMER = usbasp
 PROGRAMMER_PARAMS = -B 10
 BIN = ./bin

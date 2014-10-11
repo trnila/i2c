@@ -3,7 +3,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
-//#include <util/twi.h>
+#include <util/twi.h>
 
 
 #define BaudRate 9600
@@ -38,9 +38,9 @@ void I2C_Init()
   TWBR = ((F_CPU/F_SCL)-16)/2;
 }
 
-#define TW_START 0xA4 // send start condition (TWINT,TWSTA,TWEN)
+//#define TW_START 0xA4 // send start condition (TWINT,TWSTA,TWEN)
 #define TW_READY (TWCR & 0x80) // ready when TWINT returns to logic 1.
-#define TW_STATUS (TWSR & 0xF8) // returns value of status register
+//#define TW_STATUS (TWSR & 0xF8) // returns value of status register
 
 uint8_t I2C_Start()
 // generate a TW start condition
@@ -78,14 +78,21 @@ uint8_t I2C_Write (uint8_t data) // sends a data uint8_t to slave
 uint8_t I2C_Detect(uint8_t addr)
 // look for device at specified address; return 1=found, 0=not found
 {
- TWCR = TW_START; // send start condition
- while (!TW_READY); // wait
+	uint8_t   twst;
+
+TWCR = (1<<TWINT) | (1<<TWSTA) | (1<<TWEN);
+
+while(!(TWCR & (1<<TWINT)));
+
+twst = TW_STATUS & 0xF8;
+if ( (twst != TW_START) && (twst != TW_REP_START)) return 0;
 
  TWDR = addr; // load device's bus address
- TWCR = TW_SEND; // and send it
- while (!TW_READY); // wait
-
- return (TW_STATUS==0x18); // return 1 if found; 0 otherwise
+TWCR = (1<<TWINT) | (1<<TWEN);
+while(!(TWCR & (1<<TWINT)));
+twst = TW_STATUS & 0xF8;
+if ( (twst != TW_MT_SLA_ACK) && (twst != TW_MR_SLA_ACK) ) return 0;
+ return 1; // return 1 if found; 0 otherwise
 }
 
 #define TW_NACK 0x84 // read data with NACK (last byte)
@@ -141,7 +148,9 @@ int main() {
 while(1) {
     p("\r\nScaning....\r\n");
     for(uint8_t i = 5; i < 255; i++) {
-			  if(I2C_Detect(i)) {
+			  if(I2C_Detect(i<<1)) {
+				TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//TWI STOP
+				while(TWCR & (1<<TWSTO));
           p("Found: ");
           print(i);
           p("\r\n");

@@ -4,7 +4,7 @@
 #include <avr/interrupt.h>
 #include <util/twi.h>
 
-#define TWI_ADDR 0xAF
+//#define TWI_ADDR 0xAF
 
 unsigned char data;
 
@@ -41,7 +41,7 @@ ISR(TWI_vect){
 }
 
 int main(void){
-	TWAR = TWI_ADDR & 0xFE; // set TWI address defined in header
+	TWAR = 16 << 1; // set TWI address defined in header
 	TWCR = (1<<TWINT) | (1<<TWEA) | (1<<TWEN) | (1<<TWIE);
 	sei();
 	while(1){
