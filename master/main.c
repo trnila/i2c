@@ -10,8 +10,7 @@
 #define MYUBRR ((F_CPU / 16UL / BaudRate ) - 1)
 
 
-void USART_Transmit( unsigned char data )
-{
+void USART_Transmit( unsigned char data ){
 	/* Wait for empty transmit buffer */
 	while ( !( UCSRA & (1<<UDRE)) );
 	/* Put data into buffer, sends the data */
@@ -19,9 +18,9 @@ void USART_Transmit( unsigned char data )
 }
 
 void p(const char *data) {
-  for(int i = 0; data[i] != '\0'; i++) {
-    USART_Transmit(data[i]);
-  }
+	for(int i = 0; data[i] != '\0'; i++) {
+		USART_Transmit(data[i]);
+	}
 }
 
 void print(int number) {
@@ -34,39 +33,36 @@ void print(int number) {
 
 void I2C_Init()
 {
-  TWSR = 0;
-  TWBR = ((F_CPU/F_SCL)-16)/2;
+	TWSR = 0;
+	TWBR = ((F_CPU/F_SCL)-16)/2;
 }
 
 //#define TW_START 0xA4 // send start condition (TWINT,TWSTA,TWEN)
 #define TW_READY (TWCR & 0x80) // ready when TWINT returns to logic 1.
 //#define TW_STATUS (TWSR & 0xF8) // returns value of status register
 
-uint8_t I2C_Start()
-// generate a TW start condition
-{
- TWCR = TW_START; // send start condition
- while (!TW_READY); // wait
- return (TW_STATUS==0x08); // return 1 if found; 0 otherwise
+uint8_t I2C_Start(){
+TWCR = TW_START; // send start condition
+while (!TW_READY); // wait
+return (TW_STATUS==0x08); // return 1 if found; 0 otherwise
 }
 
 #define DS1307 0xD0 // I2C bus address of DS1307 RTC
 #define TW_SEND 0x84 // send data (TWINT,TWEN)
-uint8_t I2C_SendAddr(uint8_t addr)
-// send bus address of slave
-{
- TWDR = addr; // load device's bus address
- TWCR = TW_SEND; // and send it
- while (!TW_READY); // wait
- return (TW_STATUS==0x18); // return 1 if found; 0 otherwise
+
+uint8_t I2C_SendAddr(uint8_t addr){
+TWDR = addr; // load device's bus address
+TWCR = TW_SEND; // and send it
+while (!TW_READY); // wait
+return (TW_STATUS==0x18); // return 1 if found; 0 otherwise
 }
 
 uint8_t I2C_Write (uint8_t data) // sends a data uint8_t to slave
 {
- TWDR = data; // load data to be sent
- TWCR = TW_SEND; // and send it
- while (!TW_READY); // wait
- return (TW_STATUS!=0x28); // return 1 if found; 0 otherwise
+TWDR = data; // load data to be sent
+TWCR = TW_SEND; // and send it
+while (!TW_READY); // wait
+return (TW_STATUS!=0x28); // return 1 if found; 0 otherwise
 }
 
 #define TW_STOP 0x94 // send stop condition (TWINT,TWSTO,TWEN)
@@ -78,7 +74,7 @@ uint8_t I2C_Write (uint8_t data) // sends a data uint8_t to slave
 uint8_t I2C_Detect(uint8_t addr)
 // look for device at specified address; return 1=found, 0=not found
 {
-	uint8_t   twst;
+uint8_t   twst;
 
 TWCR = (1<<TWINT) | (1<<TWSTA) | (1<<TWEN);
 
@@ -87,47 +83,47 @@ while(!(TWCR & (1<<TWINT)));
 twst = TW_STATUS & 0xF8;
 if ( (twst != TW_START) && (twst != TW_REP_START)) return 0;
 
- TWDR = addr; // load device's bus address
+TWDR = addr; // load device's bus address
 TWCR = (1<<TWINT) | (1<<TWEN);
 while(!(TWCR & (1<<TWINT)));
 twst = TW_STATUS & 0xF8;
 if ( (twst != TW_MT_SLA_ACK) && (twst != TW_MR_SLA_ACK) ) return 0;
- return 1; // return 1 if found; 0 otherwise
+return 1; // return 1 if found; 0 otherwise
 }
 
 #define TW_NACK 0x84 // read data with NACK (last byte)
 #define READ 1
 uint8_t I2C_ReadNACK () // reads a data byte from slave
 {
- TWCR = TW_NACK; // nack = not reading more data
- while (!TW_READY); // wait
- return TWDR;
+TWCR = TW_NACK; // nack = not reading more data
+while (!TW_READY); // wait
+return TWDR;
 }
 
 
 void I2C_WriteRegister(uint8_t deviceRegister, uint8_t data)
 {
- I2C_Start();
- I2C_SendAddr(DS1307); // send bus address
- I2C_Write(deviceRegister); // first uint8_t = device register address
- I2C_Write(data); // second uint8_t = data for device register
- I2C_Stop();
+I2C_Start();
+I2C_SendAddr(DS1307); // send bus address
+I2C_Write(deviceRegister); // first uint8_t = device register address
+I2C_Write(data); // second uint8_t = data for device register
+I2C_Stop();
 }
 uint8_t I2C_ReadRegister(uint8_t deviceRegister)
 {
- uint8_t data = 0;
- I2C_Start();
- I2C_SendAddr(DS1307); // send device bus address
- I2C_Write(deviceRegister); // set register pointer
- I2C_Start();
- I2C_SendAddr(DS1307+READ); // restart as a read operation
- data = I2C_ReadNACK(); // read the register data
- I2C_Stop(); // stop
- return data;
+uint8_t data = 0;
+I2C_Start();
+I2C_SendAddr(DS1307); // send device bus address
+I2C_Write(deviceRegister); // set register pointer
+I2C_Start();
+I2C_SendAddr(DS1307+READ); // restart as a read operation
+data = I2C_ReadNACK(); // read the register data
+I2C_Stop(); // stop
+return data;
 }
 
 int main() {
-  UBRRL = MYUBRR;
+	UBRRL = MYUBRR;
 	UBRRH = (MYUBRR>>8);
 
 	/* Enable receiver and transmitter   */
@@ -142,24 +138,24 @@ int main() {
 
 
 
-  I2C_Init();
+	I2C_Init();
 
-// I2C_Detect
-while(1) {
-    p("\r\nScaning....\r\n");
-    for(uint8_t i = 5; i < 127; i++) {
-			  if(I2C_Detect(i<<1)) {
+	// I2C_Detect
+	while(1) {
+		p("\r\nScaning....\r\n");
+		for(uint8_t i = 5; i < 127; i++) {
+			if(I2C_Detect(i<<1)) {
 				TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//TWI STOP
 				while(TWCR & (1<<TWSTO));
-          p("Found: ");
-          print(i);
-          p("\r\n");
-        }
+				p("Found: ");
+				print(i);
+				p("\r\n");
+			}
 
-				_delay_ms(10);
-     }
+			_delay_ms(10);
+		}
 
-     //I2C_WriteRegister(0x00, 52);
+		//I2C_WriteRegister(0x00, 52);
 		_delay_ms(1000);
 	}
 
