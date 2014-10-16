@@ -13,7 +13,18 @@
 #define DS1307_ADDR (0x68<<1)
 #define I2C_WRITE   0
 #define I2C_READ    1
+#define F_SCL 100000UL // SCL frequency
+#define SCL_CLOCK  10000L
 const uint8_t ds1307_daysinmonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+
+void i2c_init(void)
+{
+/* initialize TWI clock: 100 kHz clock, TWPS = 0 => prescaler = 1 */
+
+TWSR = 0;                         /* no prescaler */
+TWBR = ((F_CPU/SCL_CLOCK)-16)/2;  /* must be > 10 for stable operation */
+
+}/* i2c_init */
 
 void USART_Transmit( unsigned char data ){
 	/* Wait for empty transmit buffer */
@@ -39,7 +50,7 @@ void print(const char *str, ...) {
 	p(buffer);
 }
 
-#define F_SCL 100000UL // SCL frequency
+
 #define Prescaler 1
 #define TWBR_val ((((F_CPU / F_SCL) / Prescaler) - 16 ) / 2)
 
@@ -137,15 +148,6 @@ unsigned char i2c_write( unsigned char data )
 
 }
 
-/*uint8_t I2C_read_ack(void){
-
-	// start TWI module and acknowledge data after reception
-	TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWEA);
-	// wait for end of transmission
-	while( !(TWCR & (1<<TWINT)) );
-	// return received data from TWDR
-	return TWDR;
-}*/
 
 unsigned char i2c_rep_start(unsigned char address)
 {
@@ -288,7 +290,7 @@ int main() {
 
 	p("Master ready\r\n");
 
-	I2C_init();
+	i2c_init();
 	_delay_ms(1000);
 
 	ds1307_setdate(12, 12, 31, 23, 59, 35);
