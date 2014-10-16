@@ -4,6 +4,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <util/twi.h>
+#include <stdio.h>
 
 
 #define BaudRate 9600
@@ -23,103 +24,86 @@ void p(const char *data) {
 	}
 }
 
-void print(int number) {
-	for(int i = 3; i >= 0; i--) {
-		USART_Transmit((int)(number / pow(10, i))%10 + '0');
-	}
+void print(const char *str, ...) {
+	va_list args;
+
+	char buffer[50];
+
+	va_start(args, str);
+	vsprintf(buffer, str, args);
+	va_end(args);
+	p(buffer);
 }
 
-#define F_SCL 100000L
+#define F_SCL 100000UL // SCL frequency
+#define Prescaler 1
+#define TWBR_val ((((F_CPU / F_SCL) / Prescaler) - 16 ) / 2)
 
-void I2C_Init()
-{
-	TWSR = 0;
-	TWBR = ((F_CPU/F_SCL)-16)/2;
+void I2C_init(void) {
+	TWBR = TWBR_val;
 }
 
-//#define TW_START 0xA4 // send start condition (TWINT,TWSTA,TWEN)
-#define TW_READY (TWCR & 0x80) // ready when TWINT returns to logic 1.
-//#define TW_STATUS (TWSR & 0xF8) // returns value of status register
+uint8_t I2C_start(uint8_t address) {
+	// reset TWI control register
+	TWCR = 0;
+	// transmit START condition
+	TWCR = (1<<TWINT) | (1<<TWSTA) | (1<<TWEN);
+	// wait for end of transmission
+	while( !(TWCR & (1<<TWINT)) );
 
-uint8_t I2C_Start(){
-TWCR = TW_START; // send start condition
-while (!TW_READY); // wait
-return (TW_STATUS==0x08); // return 1 if found; 0 otherwise
+	// check if the start condition was successfully transmitted
+	if(TW_STATUS != TW_START){ p("TW_START FAILED"); return 0; }
+
+	// load slave address into data register
+	TWDR = address;
+	// start transmission of address
+	TWCR = (1<<TWINT) | (1<<TWEN);
+	// wait for end of transmission
+	while( !(TWCR & (1<<TWINT)) );
+
+	// check if the device has acknowledged the READ / WRITE mode
+	if(TW_STATUS != TW_MT_SLA_ACK && TW_STATUS != TW_MR_SLA_ACK) {print(" I2C_Start: %X ", TW_STATUS); return 0;}
+
+	return 1;
 }
 
-#define DS1307 0xD0 // I2C bus address of DS1307 RTC
-#define TW_SEND 0x84 // send data (TWINT,TWEN)
+uint8_t I2C_write(uint8_t data){
+	// load data into data register
+	TWDR = data;
+	// start transmission of data
+	TWCR = (1<<TWINT) | (1<<TWEN);
+	// wait for end of transmission
+	while( !(TWCR & (1<<TWINT)) );
 
-uint8_t I2C_SendAddr(uint8_t addr){
-TWDR = addr; // load device's bus address
-TWCR = TW_SEND; // and send it
-while (!TW_READY); // wait
-return (TW_STATUS==0x18); // return 1 if found; 0 otherwise
+	if(TW_STATUS != TW_MT_DATA_ACK ){ print(" Write failed: %X ", TW_STATUS); }
+
+	return 0;
 }
 
-uint8_t I2C_Write (uint8_t data) // sends a data uint8_t to slave
-{
-TWDR = data; // load data to be sent
-TWCR = TW_SEND; // and send it
-while (!TW_READY); // wait
-return (TW_STATUS!=0x28); // return 1 if found; 0 otherwise
+/*uint8_t I2C_read_ack(void){
+
+	// start TWI module and acknowledge data after reception
+	TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWEA);
+	// wait for end of transmission
+	while( !(TWCR & (1<<TWINT)) );
+	// return received data from TWDR
+	return TWDR;
+}*/
+
+uint8_t I2C_read_nack(void){
+	// start receiving without acknowledging reception
+	TWCR = (1<<TWINT) | (1<<TWEN);
+	// wait for end of transmission
+	while( !(TWCR & (1<<TWINT)) );
+	// return received data from TWDR
+	return TWDR;
 }
 
-#define TW_STOP 0x94 // send stop condition (TWINT,TWSTO,TWEN)
-#define I2C_Stop() TWCR = TW_STOP // inline macro for stop condition
+void I2C_stop(void){
+	// transmit STOP condition
+	TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWSTO);
 
-
-
-
-uint8_t I2C_Detect(uint8_t addr)
-// look for device at specified address; return 1=found, 0=not found
-{
-uint8_t   twst;
-
-TWCR = (1<<TWINT) | (1<<TWSTA) | (1<<TWEN);
-
-while(!(TWCR & (1<<TWINT)));
-
-twst = TW_STATUS & 0xF8;
-if ( (twst != TW_START) && (twst != TW_REP_START)) return 0;
-
-TWDR = addr; // load device's bus address
-TWCR = (1<<TWINT) | (1<<TWEN);
-while(!(TWCR & (1<<TWINT)));
-twst = TW_STATUS & 0xF8;
-if ( (twst != TW_MT_SLA_ACK) && (twst != TW_MR_SLA_ACK) ) return 0;
-return 1; // return 1 if found; 0 otherwise
-}
-
-#define TW_NACK 0x84 // read data with NACK (last byte)
-#define READ 1
-uint8_t I2C_ReadNACK () // reads a data byte from slave
-{
-TWCR = TW_NACK; // nack = not reading more data
-while (!TW_READY); // wait
-return TWDR;
-}
-
-
-void I2C_WriteRegister(uint8_t deviceRegister, uint8_t data)
-{
-I2C_Start();
-I2C_SendAddr(DS1307); // send bus address
-I2C_Write(deviceRegister); // first uint8_t = device register address
-I2C_Write(data); // second uint8_t = data for device register
-I2C_Stop();
-}
-uint8_t I2C_ReadRegister(uint8_t deviceRegister)
-{
-uint8_t data = 0;
-I2C_Start();
-I2C_SendAddr(DS1307); // send device bus address
-I2C_Write(deviceRegister); // set register pointer
-I2C_Start();
-I2C_SendAddr(DS1307+READ); // restart as a read operation
-data = I2C_ReadNACK(); // read the register data
-I2C_Stop(); // stop
-return data;
+	//while(TWCR & (1<<TWSTO));
 }
 
 int main() {
@@ -136,31 +120,60 @@ int main() {
 
 	p("Master ready\r\n");
 
+	I2C_init();
+	_delay_ms(1000);
 
+	p("\r\nScaning....");
 
-	I2C_Init();
-
-	// I2C_Detect
-	while(1) {
-		p("\r\nScaning....\r\n");
-		for(uint8_t i = 5; i < 127; i++) {
-			if(I2C_Detect(i<<1)) {
-				TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//TWI STOP
-				while(TWCR & (1<<TWSTO));
-				p("Found: ");
-				print(i);
-				p("\r\n");
-			}
-
-			_delay_ms(10);
+	for(int addr = 0; addr < 128; addr++) {
+		if(addr % 10 == 0) {
+			print("\r\n");
 		}
 
-		//I2C_WriteRegister(0x00, 52);
-		_delay_ms(1000);
+		if(I2C_start(addr << 1)) {
+			print("%3d ", addr << 1);
+			I2C_write(0);
+			I2C_stop();
+		} else {
+			print("%3s ", "-");
+		}
 	}
 
+	//
+	#define ADDR 208
+	#define REG_ADDR 0
+	#define REG_DATA 18
 
+	print("\r\n\n\nSetting clock...\r\n");
 
+	// write some seconds, CH - MSB bit must be set to zero, to start clock oscilator
+	if(!I2C_start(ADDR + TW_WRITE)) {
+		print("I2CStart failed\r\n");
+		return 1;
+	}
+	I2C_write(REG_ADDR); // 0 register contains seconds
+	I2C_write(REG_DATA);
+	I2C_stop();
+
+	// read clock
+	print("Clock set.\r\n");
+	while(1) {
+			_delay_ms(1000);
+			if(!I2C_start(ADDR + TW_WRITE)) {
+				print(" I2C_start write failed!!!\r\n");
+				I2C_stop();
+				continue;
+			}
+			I2C_write(REG_ADDR);
+
+			if(!I2C_start(ADDR + TW_READ)) {
+				print("I2C read failed!\r\n");
+				I2C_stop();
+				continue;
+			}
+			print("Received: %d\r\n", I2C_read_nack());
+			I2C_stop();
+	}
 
 	return 0;
 }
